@@ -1,0 +1,312 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+// =============================================================================
+// USER MODELS
+// =============================================================================
+
+model User {
+  id                     String    @id @default(uuid())
+  email                  String    @unique
+  passwordHash           String    @map("password_hash")
+  firstName              String?   @map("first_name")
+  lastName               String?   @map("last_name")
+  avatarUrl              String?   @map("avatar_url")
+  isActive               Boolean   @default(true) @map("is_active")
+  emailVerified          Boolean   @default(false) @map("email_verified")
+  subscriptionTier       String    @default("free") @map("subscription_tier")
+  subscriptionStatus     String    @default("inactive") @map("subscription_status")
+  dailySessionsUsed      Int       @default(0) @map("daily_sessions_used")
+  dailySessionsResetAt   DateTime? @map("daily_sessions_reset_at")
+  createdAt              DateTime  @default(now()) @map("created_at")
+  updatedAt              DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  sessions       Session[]
+  auraProfiles   AuraProfile[]
+  photos         Photo[]
+  readings       Reading[]
+  subscriptions  Subscription[]
+  payments       Payment[]
+  userSessions   UserSession[]
+  auditLogs      AuditLog[]
+
+  @@map("users")
+}
+
+// =============================================================================
+// SESSION MODELS
+// =============================================================================
+
+model Session {
+  id                   String    @id @default(uuid())
+  userId               String    @map("user_id")
+  status               String    @default("started") // started, capturing, processing, completed, failed
+  startedAt            DateTime  @default(now()) @map("started_at")
+  completedAt          DateTime? @map("completed_at")
+  faceDetected         Boolean   @default(false) @map("face_detected")
+  alignmentScore       Float?    @map("alignment_score")
+  biofeedbackDurationMs Int?     @map("biofeedback_duration_ms")
+  mode                 String    @default("selfie") // selfie, friend
+  metadata             String?   // JSON String
+  createdAt            DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user              User               @relation(fields: [userId], references: [id], onDelete: Cascade)
+  biofeedbackReadings BiofeedbackReading[]
+  photos            Photo[]
+  auraProfiles      AuraProfile[]
+  readings          Reading[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("sessions")
+}
+
+model BiofeedbackReading {
+  id                String   @id @default(uuid())
+  sessionId         String   @map("session_id")
+  timestamp         DateTime @default(now())
+  touchX            Float?   @map("touch_x")
+  touchY            Float?   @map("touch_y")
+  pressure          Float?
+  stability         Float?
+  simulatedGsr      Float?   @map("simulated_gsr")
+  simulatedHrv      Float?   @map("simulated_hrv")
+  stressIndicator   Float?   @map("stress_indicator")
+  calmnessScore     Float?   @map("calmness_score")
+  rawData           String?  @map("raw_data") // JSON String
+
+  // Relations
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+
+  @@index([sessionId])
+  @@index([timestamp])
+  @@map("biofeedback_readings")
+}
+
+// =============================================================================
+// PHOTO MODELS
+// =============================================================================
+
+model Photo {
+  id              String   @id @default(uuid())
+  sessionId       String   @map("session_id")
+  userId          String   @map("user_id")
+  originalUrl     String   @map("original_url")
+  processedUrl    String?  @map("processed_url")
+  width           Int?
+  height          Int?
+  format          String?
+  fileSizeBytes   Int?     @map("file_size_bytes")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("photos")
+}
+
+// =============================================================================
+// AURA MODELS
+// =============================================================================
+
+model AuraProfile {
+  id                    String   @id @default(uuid())
+  sessionId             String   @map("session_id")
+  userId                String   @map("user_id")
+  majorityColor         String   @map("majority_color")
+  majorityPercentage    Float    @map("majority_percentage")
+  moderateColors        String   @map("moderate_colors") // JSON String
+  moderatePercentages   String   @map("moderate_percentages") // JSON String
+  minorityColors        String   @map("minority_colors") // JSON String
+  minorityPercentages   String   @map("minority_percentages") // JSON String
+  intensity             Float
+  brightness            Float
+  saturation            Float
+  positioning           String   // JSON String
+  profileData           String   @map("profile_data") // JSON String
+  createdAt             DateTime @default(now()) @map("created_at")
+
+  // Relations
+  session    Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user       User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+  auraImages AuraImage[]
+  readings   Reading[]
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("aura_profiles")
+}
+
+model AuraImage {
+  id              String   @id @default(uuid())
+  auraProfileId   String   @map("aura_profile_id")
+  sessionId       String   @map("session_id")
+  userId          String   @map("user_id")
+  imageUrl        String   @map("image_url")
+  thumbnailUrl    String?  @map("thumbnail_url")
+  width           Int?
+  height          Int?
+  format          String?
+  style           String   @default("soft") // soft, medium, strong
+  fileSizeBytes   Int?     @map("file_size_bytes")
+  isDeleted       Boolean  @default(false) @map("is_deleted")
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  auraProfile AuraProfile @relation(fields: [auraProfileId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionId])
+  @@index([createdAt])
+  @@map("aura_images")
+}
+
+// =============================================================================
+// READING MODELS
+// =============================================================================
+
+model Reading {
+  id              String   @id @default(uuid())
+  auraProfileId   String   @map("aura_profile_id")
+  sessionId       String   @map("session_id")
+  userId          String   @map("user_id")
+  section         String   // color_analysis, alignment, guidance
+  title           String?
+  content         String
+  colorReferences String   @map("color_references") // JSON String
+  generatedBy     String   @default("ai") @map("generated_by") // ai, template, hybrid
+  createdAt       DateTime @default(now()) @map("created_at")
+
+  // Relations
+  auraProfile AuraProfile @relation(fields: [auraProfileId], references: [id], onDelete: Cascade)
+  session     Session     @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  user        User        @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([auraProfileId])
+  @@index([section])
+  @@index([createdAt])
+  @@map("readings")
+}
+
+// =============================================================================
+// SUBSCRIPTION MODELS
+// =============================================================================
+
+model Subscription {
+  id                               String    @id @default(uuid())
+  userId                           String    @map("user_id")
+  planType                         String    @map("plan_type") // free, weekly, monthly, yearly
+  status                           String    @default("active") // active, cancelled, expired, paused
+  startedAt                        DateTime  @default(now()) @map("started_at")
+  expiresAt                        DateTime? @map("expires_at")
+  cancelledAt                      DateTime? @map("cancelled_at")
+  paymentProvider                  String?   @map("payment_provider") // stripe, paypal
+  paymentProviderSubscriptionId    String?   @map("payment_provider_subscription_id")
+  priceCents                       Int?      @map("price_cents")
+  currency                         String    @default("USD")
+  metadata                         String?   // JSON String
+  createdAt                        DateTime  @default(now()) @map("created_at")
+  updatedAt                        DateTime  @updatedAt @map("updated_at")
+
+  // Relations
+  user    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  payments Payment[]
+
+  @@index([userId])
+  @@index([status])
+  @@index([expiresAt])
+  @@map("subscriptions")
+}
+
+model Payment {
+  id                      String    @id @default(uuid())
+  userId                  String    @map("user_id")
+  subscriptionId          String?   @map("subscription_id")
+  amountCents             Int       @map("amount_cents")
+  currency                String    @default("USD")
+  status                  String    @default("pending") // pending, completed, failed, refunded
+  paymentProvider         String?   @map("payment_provider")
+  paymentProviderChargeId String?   @map("payment_provider_charge_id")
+  description             String?
+  metadata                String?   // JSON String
+  createdAt               DateTime  @default(now()) @map("created_at")
+  completedAt             DateTime? @map("completed_at")
+
+  // Relations
+  user         User          @relation(fields: [userId], references: [id], onDelete: Cascade)
+  subscription Subscription? @relation(fields: [subscriptionId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([subscriptionId])
+  @@index([status])
+  @@index([createdAt])
+  @@map("payments")
+}
+
+// =============================================================================
+// AUTH MODELS
+// =============================================================================
+
+model UserSession {
+  id         String    @id @default(uuid())
+  userId     String    @map("user_id")
+  tokenHash  String    @map("token_hash")
+  expiresAt  DateTime  @map("expires_at")
+  ipAddress  String?   @map("ip_address")
+  userAgent  String?   @map("user_agent")
+  isValid    Boolean   @default(true) @map("is_valid")
+  createdAt  DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([tokenHash])
+  @@index([expiresAt])
+  @@map("user_sessions")
+}
+
+// =============================================================================
+// AUDIT LOG MODEL
+// =============================================================================
+
+model AuditLog {
+  id           String    @id @default(uuid())
+  userId       String?   @map("user_id")
+  action       String
+  entityType   String?   @map("entity_type")
+  entityId     String?   @map("entity_id")
+  oldValues    String?   @map("old_values") // JSON String
+  newValues    String?   @map("new_values") // JSON String
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
+  createdAt    DateTime  @default(now()) @map("created_at")
+
+  // Relations
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId])
+  @@index([action])
+  @@index([entityType])
+  @@index([createdAt])
+  @@map("audit_logs")
+}
